@@ -208,6 +208,26 @@
   .control.disabled .control-label .value {
     opacity: 0.4;
   }
+  .toggle-row {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid #374151;
+  }
+  .toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #d1d5db;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-label input[type=checkbox] {
+    width: 14px;
+    height: 14px;
+    accent-color: #f97316;
+    cursor: pointer;
+  }
   button.action {
     width: 100%;
     padding: 10px;
@@ -376,6 +396,12 @@
           <div class="control-label"><span>Disturbance — Wheel B</span><span class="value" id="distBVal">0%</span></div>
           <input type="range" id="distB" min="0" max="100" step="5" value="0">
         </div>
+        <div class="toggle-row">
+          <label class="toggle-label">
+            <input type="checkbox" id="noiseToggle" checked>
+            <span>Encoder noise (realistic)</span>
+          </label>
+        </div>
       </div>
     </div>
 
@@ -474,13 +500,20 @@ function pwmToSteadySpeed(pwm, wheel) {
 //  Returns time-series for both wheels and the robot path.
 // ============================================================
 function simulate(params) {
-  const { setpoint, kp, ki, kd, distA, distB, openLoop } = params;
+  const { setpoint, kp, ki, kd, distA, distB, openLoop, noiseEnabled } = params;
 
   // Per-wheel state (second-order: speed and its rate of change)
   const state = {
     A: { speed: 0, accel: 0, integral: 0, lastError: 0, pwm: 0 },
     B: { speed: 0, accel: 0, integral: 0, lastError: 0, pwm: 0 }
   };
+
+  // Box-Muller transform: returns a Gaussian sample with mean 0, std 1
+  function gaussian() {
+    const u1 = Math.random() || 1e-10;
+    const u2 = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+  }
 
   // In open-loop mode the PWM is fixed for the whole run, mimicking
   // what the Workshop 2.4 bridge node would send for this setpoint.
@@ -517,8 +550,13 @@ function simulate(params) {
           // Open loop: ignore feedback entirely, drive the fixed PWM
           s.pwm = openLoopPwm;
         } else {
-          // Closed loop: standard discrete PID with anti-windup
-          const error = setpoint - s.speed;
+          // Closed loop: standard discrete PID with anti-windup.
+          // The PID sees a noisy version of the wheel speed, mimicking
+          // real encoder jitter. The plant itself is noise-free.
+          const measuredSpeed = noiseEnabled
+            ? s.speed + gaussian() * NOISE_STDDEV
+            : s.speed;
+          const error = setpoint - measuredSpeed;
           const saturated = (s.pwm >= PWM_MAX && error > 0) || (s.pwm <= PWM_MIN && error < 0);
           if (!saturated) s.integral += error * PID_PERIOD;
           const derivative = (error - s.lastError) / PID_PERIOD;
@@ -950,9 +988,13 @@ function generateAdvice(diagA, diagB, pathDiag, params) {
   else if (d.overshoot > 3 && kd === 0) {
     hints.push("Some overshoot remains. Add a little Kd to damp it without slowing the rise.");
   }
-  // Moderate overshoot with Kd already
-  else if (d.overshoot > 3) {
+  // Moderate overshoot with low Kd already
+  else if (d.overshoot > 3 && kd > 0 && kd <= 120) {
     hints.push("Still some overshoot — try increasing Kd slightly, or reducing Ki.");
+  }
+  // Moderate overshoot with already-high Kd: don't suggest more Kd
+  else if (d.overshoot > 3 && kd > 120) {
+    hints.push("Still some overshoot, but Kd is already high. Try reducing Ki instead.");
   }
 
   // Steady-state error
@@ -977,8 +1019,10 @@ function generateAdvice(diagA, diagB, pathDiag, params) {
   }
 
   // Kd warning
-  if (kd > 120 && d.overshoot < 1) {
-    hints.push("Kd may be higher than needed. Strong Kd amplifies noise on the real robot — keep it as low as you can while still meeting the spec.");
+  if (kd > 120 && params.noiseEnabled) {
+    hints.push("Kd is very high. With realistic encoder noise on, the derivative term is amplifying that noise into the PWM output — look closely at the response curve and you'll see the jitter. The real robot will buzz audibly at these gains.");
+  } else if (kd > 120 && d.overshoot < 1) {
+    hints.push("Kd is higher than needed. With noise off it looks clean, but on the real robot the derivative term amplifies encoder jitter and you'd see PWM oscillation. Try the noise checkbox.");
   }
 
   if (hints.length === 0) {
@@ -1007,6 +1051,7 @@ const state = {
   distA: 0,
   distB: 0,
   openLoop: false,
+  noiseEnabled: true,
   ghostsA: [],
   ghostsB: [],
   ghostsPath: [],
@@ -1019,6 +1064,13 @@ const state = {
 // Workshop 2.4b measured on the real WonderBot. PWM = (setpoint / v_max) * 255.
 const OPEN_LOOP_VMAX = 0.19;
 
+// Encoder measurement noise. The plant integrates cleanly, but the speed
+// the PID *sees* has Gaussian jitter at this standard deviation. This is
+// what makes high Kd actually misbehave: the derivative term amplifies the
+// step-to-step jitter into visible PWM oscillation. On the real robot the
+// jitter comes from quantisation, sampling, and small mechanical play.
+const NOISE_STDDEV = 0.002;  // m/s, about 1% of wheel max speed
+
 const MAX_GHOSTS = 4;
 
 function readParams() {
@@ -1029,7 +1081,8 @@ function readParams() {
     kd: state.kd,
     distA: state.distA,
     distB: state.distB,
-    openLoop: state.openLoop
+    openLoop: state.openLoop,
+    noiseEnabled: state.noiseEnabled
   };
 }
 
@@ -1058,6 +1111,10 @@ bindSlider('kd', 'kd', parseFloat);
 bindSlider('distA', 'distA', parseFloat);
 bindSlider('distB', 'distB', parseFloat);
 
+document.getElementById('noiseToggle').addEventListener('change', (e) => {
+  state.noiseEnabled = e.target.checked;
+});
+
 document.getElementById('stepBtn').addEventListener('click', fireStepResponse);
 document.getElementById('clearGhostsBtn').addEventListener('click', () => {
   state.ghostsA = [];
@@ -1070,6 +1127,7 @@ document.getElementById('resetAllBtn').addEventListener('click', () => {
   state.distA = 0; state.distB = 0;
   state.setpoint = 0.10;
   state.openLoop = false;
+  state.noiseEnabled = true;
   state.ghostsA = []; state.ghostsB = []; state.ghostsPath = [];
   state.missionsPassed = {};
   state.lastSim = null;
@@ -1079,6 +1137,7 @@ document.getElementById('resetAllBtn').addEventListener('click', () => {
   document.getElementById('kd').value = 0;
   document.getElementById('distA').value = 0;
   document.getElementById('distB').value = 0;
+  document.getElementById('noiseToggle').checked = true;
   setGainSlidersEnabled(true);
   updateLabels();
   renderMissions(state.missionsPassed);
