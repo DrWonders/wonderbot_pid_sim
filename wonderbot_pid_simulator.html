@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WonderBot PID Simulator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f5f5f5;
+    color: #1f2937;
+    line-height: 1.4;
+  }
+  .container {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    min-height: 100vh;
+    max-width: 1600px;
+    margin: 0 auto;
+    background: white;
+  }
+  main {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  aside {
+    background: #1f2937;
+    color: #f3f4f6;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow-y: auto;
+  }
+  header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 4px;
+  }
+  header .subtitle {
+    font-size: 13px;
+    color: #6b7280;
+  }
+  .graphs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .graph-block {
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .graph-block h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .graph-block h3 .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+  }
+  canvas.wheel-graph {
+    width: 100%;
+    height: 180px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+  }
+  .diag-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 11px;
+  }
+  .diag-cell {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 4px 6px;
+  }
+  .diag-cell .label {
+    color: #6b7280;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .diag-cell .value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    font-variant-numeric: tabular-nums;
+  }
+  .path-block {
+    background: #fafafa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .path-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .path-block h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+  }
+  .path-diags {
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: #6b7280;
+  }
+  .path-diags span {
+    font-variant-numeric: tabular-nums;
+  }
+  .path-diags b {
+    color: #1f2937;
+    font-weight: 600;
+  }
+  canvas.path-canvas {
+    width: 100%;
+    height: 200px;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+  }
+  aside h2 {
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #d1d5db;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #374151;
+  }
+  .control-group { display: flex; flex-direction: column; gap: 10px; }
+  .control {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .control-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #d1d5db;
+  }
+  .control-label .value {
+    color: #f97316;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: #374151;
+    border-radius: 3px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: #f97316;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: #f97316;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+  button.action {
+    width: 100%;
+    padding: 10px;
+    background: #f97316;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button.action:hover { background: #ea580c; }
+  button.secondary {
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    color: #d1d5db;
+    border: 1px solid #4b5563;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button.secondary:hover { background: #374151; }
+  .button-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .mission {
+    background: #111827;
+    border: 1px solid #374151;
+    border-left: 3px solid #4b5563;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  .mission.passed {
+    border-left-color: #14b8a6;
+    background: #064e3b22;
+  }
+  .mission .title {
+    font-weight: 600;
+    color: #f3f4f6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .mission.passed .title::after {
+    content: '✓';
+    color: #14b8a6;
+    margin-left: auto;
+    font-size: 14px;
+  }
+  .mission .desc {
+    color: #9ca3af;
+    font-size: 11px;
+  }
+  .advice {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    min-height: 60px;
+  }
+  .advice .title {
+    color: #14b8a6;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .advice ul { padding-left: 16px; color: #d1d5db; }
+  .advice ul li { margin-bottom: 2px; }
+  .advice .clean {
+    color: #14b8a6;
+    font-weight: 600;
+  }
+  .preset-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .preset-row button {
+    padding: 6px;
+    background: transparent;
+    color: #d1d5db;
+    border: 1px solid #4b5563;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .preset-row button:hover { background: #374151; }
+  .footer-note {
+    font-size: 11px;
+    color: #6b7280;
+    text-align: center;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid #374151;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <main>
+    <header>
+      <h1>WonderBot PID Simulator</h1>
+      <div class="subtitle">Tune a closed-loop wheel speed controller. Two motors, deliberately mismatched, behaving like the real WonderBot hardware.</div>
+    </header>
+
+    <div class="graphs">
+      <div class="graph-block">
+        <h3><span class="swatch" style="background:#dc2626"></span>Wheel A speed response</h3>
+        <canvas class="wheel-graph" id="canvasA"></canvas>
+        <div class="diag-row" id="diagsA"></div>
+      </div>
+      <div class="graph-block">
+        <h3><span class="swatch" style="background:#2563eb"></span>Wheel B speed response</h3>
+        <canvas class="wheel-graph" id="canvasB"></canvas>
+        <div class="diag-row" id="diagsB"></div>
+      </div>
+    </div>
+
+    <div class="path-block">
+      <div class="path-block-header">
+        <h3>Robot path (top-down view)</h3>
+        <div class="path-diags" id="pathDiags"></div>
+      </div>
+      <canvas class="path-canvas" id="canvasPath"></canvas>
+    </div>
+  </main>
+
+  <aside>
+    <div>
+      <h2>Controls</h2>
+      <div class="control-group">
+        <div class="control">
+          <div class="control-label"><span>Setpoint (both wheels)</span><span class="value" id="setpointVal">0.10 m/s</span></div>
+          <input type="range" id="setpoint" min="0.02" max="0.18" step="0.01" value="0.10">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Kp</span><span class="value" id="kpVal">0</span></div>
+          <input type="range" id="kp" min="0" max="10000" step="100" value="0">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Ki</span><span class="value" id="kiVal">0</span></div>
+          <input type="range" id="ki" min="0" max="15000" step="100" value="0">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Kd</span><span class="value" id="kdVal">0</span></div>
+          <input type="range" id="kd" min="0" max="200" step="2" value="0">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Disturbance — Wheel A</span><span class="value" id="distAVal">0%</span></div>
+          <input type="range" id="distA" min="0" max="100" step="5" value="0">
+        </div>
+        <div class="control">
+          <div class="control-label"><span>Disturbance — Wheel B</span><span class="value" id="distBVal">0%</span></div>
+          <input type="range" id="distB" min="0" max="100" step="5" value="0">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h2>Presets</h2>
+      <div class="preset-row">
+        <button data-preset="zero">Zero</button>
+        <button data-preset="ponly">P only</button>
+        <button data-preset="pi">P + I</button>
+      </div>
+      <div style="margin-top:8px;">
+        <button class="action" id="stepBtn">⚡ Fire Step Response</button>
+      </div>
+      <div class="button-row" style="margin-top:8px;">
+        <button class="secondary" id="clearGhostsBtn">Clear ghost trails</button>
+        <button class="secondary" id="resetAllBtn">Reset all</button>
+      </div>
+    </div>
+
+    <div>
+      <h2>Missions</h2>
+      <div id="missions"></div>
+    </div>
+
+    <div>
+      <h2>Tuning advice</h2>
+      <div class="advice" id="advice">
+        <div class="title">Hint</div>
+        <div>Fire a step response to see how your gains behave.</div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      WonderBot Differential Drive Robotics Course
+    </div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+
+// ============================================================
+//  PLANT MODEL
+//  Two wheels with deliberately different motor characteristics.
+//  Each wheel is a second-order system with deadband and saturation.
+//  Second-order is required so that high Kp produces visible
+//  oscillation — the pedagogical lesson PID is built around.
+//  Wheel B is deliberately slower and weaker to teach the asymmetry
+//  lesson that drives the "make the robot go straight" mission.
+// ============================================================
+const WHEELS = {
+  A: { wn: 14, zeta: 0.5, deadband: 25, vmaxAtFullPwm: 0.20 },
+  B: { wn: 11, zeta: 0.5, deadband: 35, vmaxAtFullPwm: 0.18 }
+};
+
+// PWM clamp
+const PWM_MAX = 255;
+const PWM_MIN = -255;
+
+// Robot kinematics
+const TRACK_WIDTH = 0.215;  // metres, real WonderBot value
+
+// Simulation time
+const SIM_DURATION = 3.0;   // seconds
+const SIM_DT = 0.001;       // 1ms internal timestep
+const SAMPLES = Math.floor(SIM_DURATION / SIM_DT);
+
+// PID rate: the firmware runs at 100Hz, so we update the PID output
+// every 10ms of simulated time. The plant integrates at 1ms.
+const PID_PERIOD = 0.01;    // 10ms => 100Hz
+
+// Disturbance kicks in mid-run for Mission 5.
+// Pushed back to 1.5s so the system has time to reach steady state first.
+const DISTURBANCE_START = 1.5;
+
+// Steady-state measurement window — after settling, before disturbance
+const SS_WIN_START = 1.0;
+const SS_WIN_END = 1.5;
+
+// ============================================================
+//  CONVERT PWM TO STEADY-STATE WHEEL SPEED
+// ============================================================
+function pwmToSteadySpeed(pwm, wheel) {
+  const w = WHEELS[wheel];
+  const sign = pwm >= 0 ? 1 : -1;
+  const magnitude = Math.abs(pwm);
+  if (magnitude < w.deadband) return 0;
+  // Linear above deadband
+  const usable = (magnitude - w.deadband) / (PWM_MAX - w.deadband);
+  return sign * usable * w.vmaxAtFullPwm;
+}
+
+// ============================================================
+//  RUN ONE STEP RESPONSE SIMULATION
+//  Returns time-series for both wheels and the robot path.
+// ============================================================
+function simulate(params) {
+  const { setpoint, kp, ki, kd, distA, distB } = params;
+
+  // Per-wheel state (second-order: speed and its rate of change)
+  const state = {
+    A: { speed: 0, accel: 0, integral: 0, lastError: 0, pwm: 0 },
+    B: { speed: 0, accel: 0, integral: 0, lastError: 0, pwm: 0 }
+  };
+
+  // Path state (kinematic integration)
+  const path = { x: 0, y: 0, theta: 0 };
+
+  // Output arrays
+  const N = SAMPLES;
+  const out = {
+    t: new Float32Array(N),
+    A: { speed: new Float32Array(N), pwm: new Float32Array(N) },
+    B: { speed: new Float32Array(N), pwm: new Float32Array(N) },
+    path: { x: new Float32Array(N), y: new Float32Array(N), theta: new Float32Array(N) }
+  };
+
+  let lastPidT = 0;
+
+  for (let i = 0; i < N; i++) {
+    const t = i * SIM_DT;
+
+    // ---- PID update at 100Hz ----
+    if (t - lastPidT >= PID_PERIOD || i === 0) {
+      lastPidT = t;
+      for (const w of ['A', 'B']) {
+        const s = state[w];
+        const error = setpoint - s.speed;
+        const saturated = (s.pwm >= PWM_MAX && error > 0) || (s.pwm <= PWM_MIN && error < 0);
+        if (!saturated) s.integral += error * PID_PERIOD;
+        const derivative = (error - s.lastError) / PID_PERIOD;
+        s.lastError = error;
+        let pwm = kp * error + ki * s.integral + kd * derivative;
+        if (pwm > PWM_MAX) pwm = PWM_MAX;
+        if (pwm < PWM_MIN) pwm = PWM_MIN;
+        s.pwm = pwm;
+      }
+    }
+
+    // ---- Plant update at 1ms (second-order dynamics) ----
+    for (const w of ['A', 'B']) {
+      const s = state[w];
+      const wParam = WHEELS[w];
+      // Apply disturbance after DISTURBANCE_START — simulates someone slowing the wheel
+      const distFrac = (t >= DISTURBANCE_START) ? (w === 'A' ? distA : distB) / 100 : 0;
+      const targetSpeed = pwmToSteadySpeed(s.pwm, w);
+      const effectiveTarget = targetSpeed * (1 - distFrac);
+      // Second-order ODE: d²x/dt² + 2ζωn dx/dt + ωn² x = ωn² u
+      // Rearranged: d(accel)/dt = ωn² (target - speed) − 2ζωn (accel)
+      const wn = wParam.wn, zeta = wParam.zeta;
+      const accelDot = wn * wn * (effectiveTarget - s.speed) - 2 * zeta * wn * s.accel;
+      s.accel += accelDot * SIM_DT;
+      s.speed += s.accel * SIM_DT;
+    }
+
+    // ---- Kinematic path integration ----
+    const v = (state.A.speed + state.B.speed) / 2;
+    const omega = (state.B.speed - state.A.speed) / TRACK_WIDTH;
+    path.theta += omega * SIM_DT;
+    path.x += v * Math.cos(path.theta) * SIM_DT;
+    path.y += v * Math.sin(path.theta) * SIM_DT;
+
+    // ---- Record ----
+    out.t[i] = t;
+    out.A.speed[i] = state.A.speed;
+    out.A.pwm[i] = state.A.pwm;
+    out.B.speed[i] = state.B.speed;
+    out.B.pwm[i] = state.B.pwm;
+    out.path.x[i] = path.x;
+    out.path.y[i] = path.y;
+    out.path.theta[i] = path.theta;
+  }
+
+  return out;
+}
+
+// ============================================================
+//  COMPUTE DIAGNOSTICS FROM A SIMULATION RESULT
+// ============================================================
+function computeWheelDiagnostics(speeds, setpoint) {
+  const N = speeds.length;
+  let riseTime = null;
+  let maxSpeed = 0;
+  // Rise time: time to first reach 90% of setpoint
+  const riseTarget = 0.9 * setpoint;
+  for (let i = 0; i < N; i++) {
+    if (speeds[i] > maxSpeed) maxSpeed = speeds[i];
+    if (riseTime === null && speeds[i] >= riseTarget) {
+      riseTime = i * SIM_DT;
+    }
+  }
+  const overshoot = setpoint > 0 ? Math.max(0, (maxSpeed - setpoint) / setpoint) * 100 : 0;
+  // Steady-state error: average of last 0.5s pre-disturbance
+  const ssStart = Math.floor(SS_WIN_START / SIM_DT);
+  const ssEnd = Math.floor(SS_WIN_END / SIM_DT);
+  let ssSum = 0, ssCount = 0;
+  for (let i = ssStart; i < ssEnd; i++) { ssSum += speeds[i]; ssCount++; }
+  const ssAvg = ssCount > 0 ? ssSum / ssCount : 0;
+  const ssError = setpoint > 0 ? Math.abs(setpoint - ssAvg) / setpoint * 100 : 0;
+  // Settling time: first time after which the speed stays within ±5% of setpoint for at least 0.3s
+  // (only counted up until disturbance for cleanness)
+  let settlingTime = null;
+  const tol = 0.05 * setpoint;
+  const holdSamples = Math.floor(0.3 / SIM_DT);
+  for (let i = 0; i < ssEnd - holdSamples; i++) {
+    let stable = true;
+    for (let j = 0; j < holdSamples; j++) {
+      if (Math.abs(speeds[i + j] - setpoint) > tol) { stable = false; break; }
+    }
+    if (stable) { settlingTime = i * SIM_DT; break; }
+  }
+  return { riseTime, overshoot, ssError, settlingTime };
+}
+
+function computePathDiagnostics(pathX, pathY, pathTheta) {
+  const N = pathX.length;
+  // Maximum lateral deviation: max |y| in metres
+  let maxLat = 0;
+  for (let i = 0; i < N; i++) {
+    if (Math.abs(pathY[i]) > maxLat) maxLat = Math.abs(pathY[i]);
+  }
+  // Final heading error: |theta| at end in degrees
+  const finalHeading = Math.abs(pathTheta[N - 1]) * 180 / Math.PI;
+  // Final X position
+  const finalX = pathX[N - 1];
+  return { maxLat, finalHeading, finalX };
+}
+
+// ============================================================
+//  RENDERING
+// ============================================================
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+function drawWheelGraph(canvasId, speeds, ghostSpeeds, setpoint, color) {
+  const canvas = document.getElementById(canvasId);
+  const { ctx, w, h } = setupCanvas(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  // Y range: 0 to about 1.5x setpoint or max value seen, whichever is greater
+  let yMax = setpoint * 1.6;
+  for (let i = 0; i < speeds.length; i++) if (speeds[i] > yMax) yMax = speeds[i];
+  for (const g of ghostSpeeds) for (let i = 0; i < g.length; i++) if (g[i] > yMax) yMax = g[i];
+  yMax = yMax * 1.1;
+
+  const PADDING_L = 36, PADDING_R = 8, PADDING_T = 8, PADDING_B = 22;
+  const plotW = w - PADDING_L - PADDING_R;
+  const plotH = h - PADDING_T - PADDING_B;
+
+  const xPx = (t) => PADDING_L + (t / SIM_DURATION) * plotW;
+  const yPx = (v) => PADDING_T + plotH - (v / yMax) * plotH;
+
+  // Grid
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 1;
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.fillStyle = '#9ca3af';
+  for (let yv = 0; yv <= yMax; yv += yMax / 4) {
+    const y = yPx(yv);
+    ctx.beginPath();
+    ctx.moveTo(PADDING_L, y);
+    ctx.lineTo(w - PADDING_R, y);
+    ctx.stroke();
+    ctx.fillText(yv.toFixed(2), 2, y + 3);
+  }
+  for (let xv = 0; xv <= SIM_DURATION; xv += 0.5) {
+    const x = xPx(xv);
+    ctx.beginPath();
+    ctx.moveTo(x, PADDING_T);
+    ctx.lineTo(x, PADDING_T + plotH);
+    ctx.stroke();
+    ctx.fillText(xv.toFixed(1) + 's', x - 9, h - 6);
+  }
+
+  // Setpoint line (teal dashed)
+  ctx.strokeStyle = '#14b8a6';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(PADDING_L, yPx(setpoint));
+  ctx.lineTo(w - PADDING_R, yPx(setpoint));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Disturbance marker (vertical line at DISTURBANCE_START if any disturbance > 0)
+  // (We don't know about disturbances here; let layer caller pass a flag. For now, draw a faint marker always.)
+  ctx.strokeStyle = '#fb923c33';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 3]);
+  ctx.beginPath();
+  ctx.moveTo(xPx(DISTURBANCE_START), PADDING_T);
+  ctx.lineTo(xPx(DISTURBANCE_START), PADDING_T + plotH);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Ghost curves
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
+  for (const g of ghostSpeeds) {
+    ctx.beginPath();
+    for (let i = 0; i < g.length; i += 4) {
+      const x = xPx(i * SIM_DT);
+      const y = yPx(g[i]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Main curve
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < speeds.length; i += 4) {
+    const x = xPx(i * SIM_DT);
+    const y = yPx(speeds[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
+function drawPath(canvasId, currentPath, ghostPaths) {
+  const canvas = document.getElementById(canvasId);
+  const { ctx, w, h } = setupCanvas(canvas);
+  ctx.clearRect(0, 0, w, h);
+
+  // Compute bounds: x range fixed (0 to about 0.4m), y range symmetric, large enough to show drift
+  const xMax = 0.5;
+  let yRange = 0.15;
+  // Expand y if any path exceeds
+  for (let i = 0; i < currentPath.x.length; i++) if (Math.abs(currentPath.y[i]) > yRange) yRange = Math.abs(currentPath.y[i]);
+  for (const g of ghostPaths) for (let i = 0; i < g.y.length; i++) if (Math.abs(g.y[i]) > yRange) yRange = Math.abs(g.y[i]);
+  yRange = yRange * 1.2;
+
+  const PADDING = 24;
+  const plotW = w - 2 * PADDING;
+  const plotH = h - 2 * PADDING;
+
+  const xPx = (xv) => PADDING + (xv / xMax) * plotW;
+  const yPx = (yv) => PADDING + plotH / 2 - (yv / yRange) * (plotH / 2);
+
+  // Grid
+  ctx.strokeStyle = '#e5e7eb';
+  ctx.lineWidth = 1;
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.fillStyle = '#9ca3af';
+  // x gridlines every 0.1m
+  for (let xv = 0; xv <= xMax; xv += 0.1) {
+    const x = xPx(xv);
+    ctx.beginPath();
+    ctx.moveTo(x, PADDING);
+    ctx.lineTo(x, h - PADDING);
+    ctx.stroke();
+    ctx.fillText(xv.toFixed(1) + 'm', x - 10, h - 8);
+  }
+  // y gridlines every 0.05m
+  for (let yv = -yRange; yv <= yRange + 0.001; yv += 0.05) {
+    const y = yPx(yv);
+    ctx.beginPath();
+    ctx.moveTo(PADDING, y);
+    ctx.lineTo(w - PADDING, y);
+    ctx.stroke();
+    ctx.fillText(yv.toFixed(2), 2, y + 3);
+  }
+
+  // Centre line (the "straight ahead" axis)
+  ctx.strokeStyle = '#14b8a6';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(PADDING, yPx(0));
+  ctx.lineTo(w - PADDING, yPx(0));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Ghost paths
+  ctx.strokeStyle = '#cbd5e1';
+  ctx.lineWidth = 1;
+  for (const g of ghostPaths) {
+    ctx.beginPath();
+    for (let i = 0; i < g.x.length; i += 8) {
+      const x = xPx(g.x[i]);
+      const y = yPx(g.y[i]);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Current path
+  ctx.strokeStyle = '#1f2937';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  for (let i = 0; i < currentPath.x.length; i += 8) {
+    const x = xPx(currentPath.x[i]);
+    const y = yPx(currentPath.y[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Robot starting marker (small filled circle at origin)
+  ctx.fillStyle = '#1f2937';
+  ctx.beginPath();
+  ctx.arc(xPx(0), yPx(0), 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Final pose marker
+  const lastIdx = currentPath.x.length - 1;
+  const finalX = xPx(currentPath.x[lastIdx]);
+  const finalY = yPx(currentPath.y[lastIdx]);
+  const finalTheta = currentPath.theta[lastIdx];
+  ctx.fillStyle = '#dc2626';
+  ctx.beginPath();
+  ctx.arc(finalX, finalY, 5, 0, Math.PI * 2);
+  ctx.fill();
+  // Arrow indicating heading
+  ctx.strokeStyle = '#dc2626';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(finalX, finalY);
+  ctx.lineTo(finalX + Math.cos(finalTheta) * 14, finalY - Math.sin(finalTheta) * 14);
+  ctx.stroke();
+}
+
+// ============================================================
+//  DIAGNOSTIC UI
+// ============================================================
+function renderDiagnostics(elementId, diag, setpoint) {
+  const el = document.getElementById(elementId);
+  const fmt = (v, suffix, digits = 0) => v === null ? '—' : (v.toFixed(digits) + suffix);
+  el.innerHTML = `
+    <div class="diag-cell"><div class="label">Rise time</div><div class="value">${diag.riseTime === null ? '—' : (diag.riseTime * 1000).toFixed(0) + 'ms'}</div></div>
+    <div class="diag-cell"><div class="label">Overshoot</div><div class="value">${diag.overshoot.toFixed(0)}%</div></div>
+    <div class="diag-cell"><div class="label">SS Error</div><div class="value">${diag.ssError.toFixed(0)}%</div></div>
+    <div class="diag-cell"><div class="label">Settling</div><div class="value">${diag.settlingTime === null ? '—' : (diag.settlingTime * 1000).toFixed(0) + 'ms'}</div></div>
+  `;
+}
+
+function renderPathDiagnostics(diag) {
+  const el = document.getElementById('pathDiags');
+  el.innerHTML = `
+    <span>Max lateral drift: <b>${(diag.maxLat * 100).toFixed(1)} cm</b></span>
+    <span>Final heading error: <b>${diag.finalHeading.toFixed(1)}°</b></span>
+  `;
+}
+
+// ============================================================
+//  MISSIONS
+// ============================================================
+const MISSIONS = [
+  {
+    id: 1,
+    title: 'Mission 1 — Make it move',
+    desc: 'Get Wheel A to 90% of the setpoint in under 500 ms.',
+    check: (a, b, p, params) => a.riseTime !== null && a.riseTime < 0.5
+  },
+  {
+    id: 2,
+    title: 'Mission 2 — Close the gap',
+    desc: 'Wheel A steady-state error below 5% of setpoint.',
+    check: (a, b, p, params) => a.ssError < 5
+  },
+  {
+    id: 3,
+    title: 'Mission 3 — Damp the oscillation',
+    desc: 'Wheel A overshoot under 3% and settling time under 700 ms.',
+    check: (a, b, p, params) => a.overshoot < 3 && a.settlingTime !== null && a.settlingTime < 0.7
+  },
+  {
+    id: 4,
+    title: 'Mission 4 — Drive straight',
+    desc: 'Drive at least 25 cm forward and stay within ±5 cm of the centre line. (No disturbance.)',
+    check: (a, b, p, params) => p.maxLat < 0.05 && p.finalX >= 0.25 && params.distA === 0 && params.distB === 0
+  },
+  {
+    id: 5,
+    title: 'Mission 5 — Hold under disturbance',
+    desc: 'Apply ≥50% disturbance to one wheel mid-run. Recover and keep total path drift under 8 cm.',
+    check: (a, b, p, params) => p.maxLat < 0.08 && (params.distA >= 50 || params.distB >= 50)
+  }
+];
+
+function renderMissions(passed) {
+  const el = document.getElementById('missions');
+  el.innerHTML = '';
+  for (const m of MISSIONS) {
+    const div = document.createElement('div');
+    div.className = 'mission' + (passed[m.id] ? ' passed' : '');
+    div.innerHTML = `<div class="title">${m.title}</div><div class="desc">${m.desc}</div>`;
+    el.appendChild(div);
+  }
+}
+
+// ============================================================
+//  TUNING ADVICE
+// ============================================================
+function generateAdvice(diagA, diagB, pathDiag, params) {
+  const hints = [];
+  const { setpoint, kp, ki, kd } = params;
+  const d = diagA;
+
+  // No response at all
+  if (d.riseTime === null && diagB.riseTime === null) {
+    hints.push("Wheels never reach 90% of setpoint. Kp is probably too low — increase it.");
+    return { clean: false, hints };
+  }
+
+  // Severe overshoot
+  if (d.overshoot > 30) {
+    hints.push("Heavy overshoot. Reduce Kp, or add Kd to damp it.");
+  }
+  // Moderate overshoot with no Kd
+  else if (d.overshoot > 3 && kd === 0) {
+    hints.push("Some overshoot remains. Add a little Kd to damp it without slowing the rise.");
+  }
+  // Moderate overshoot with Kd already
+  else if (d.overshoot > 3) {
+    hints.push("Still some overshoot — try increasing Kd slightly, or reducing Ki.");
+  }
+
+  // Steady-state error
+  if (d.ssError > 8) {
+    hints.push("Steady-state error is large. Add some Ki to close the gap.");
+  } else if (d.ssError > 3 && ki === 0) {
+    hints.push("Speed settles below setpoint. A small Ki will close the gap.");
+  }
+
+  // Slow rise
+  if (d.riseTime !== null && d.riseTime > 0.5) {
+    hints.push("Rise is sluggish. Increase Kp.");
+  }
+
+  // Path-specific: drift even without disturbance
+  if (pathDiag.maxLat > 0.05 && params.distA === 0 && params.distB === 0) {
+    hints.push("Robot drifts off straight without any disturbance — that's motor asymmetry. PID can compensate; push the gains until both wheels track the setpoint cleanly.");
+  }
+  // Path-specific: short distance
+  if (pathDiag.finalX < 0.25 && params.distA === 0 && params.distB === 0) {
+    hints.push("Robot didn't travel far enough. The wheels aren't reaching setpoint — your steady-state error is preventing the robot from moving at the commanded speed.");
+  }
+
+  // Kd warning
+  if (kd > 120 && d.overshoot < 1) {
+    hints.push("Kd may be higher than needed. Strong Kd amplifies noise on the real robot — keep it as low as you can while still meeting the spec.");
+  }
+
+  if (hints.length === 0) {
+    return { clean: true, hints: ["Response is clean across all metrics. Try Mission 4 or 5 to test under realistic conditions."] };
+  }
+  return { clean: false, hints };
+}
+
+function renderAdvice(a) {
+  const el = document.getElementById('advice');
+  if (a.clean) {
+    el.innerHTML = `<div class="title">Hint</div><div class="clean">${a.hints[0]}</div>`;
+  } else {
+    el.innerHTML = `<div class="title">Hint</div><ul>${a.hints.map(h => `<li>${h}</li>`).join('')}</ul>`;
+  }
+}
+
+// ============================================================
+//  STATE AND EVENT WIRING
+// ============================================================
+const state = {
+  setpoint: 0.10,
+  kp: 0,
+  ki: 0,
+  kd: 0,
+  distA: 0,
+  distB: 0,
+  ghostsA: [],
+  ghostsB: [],
+  ghostsPath: [],
+  missionsPassed: {},
+  lastSim: null
+};
+
+const MAX_GHOSTS = 4;
+
+function readParams() {
+  return {
+    setpoint: state.setpoint,
+    kp: state.kp,
+    ki: state.ki,
+    kd: state.kd,
+    distA: state.distA,
+    distB: state.distB
+  };
+}
+
+function updateLabels() {
+  document.getElementById('setpointVal').textContent = state.setpoint.toFixed(2) + ' m/s';
+  document.getElementById('kpVal').textContent = state.kp;
+  document.getElementById('kiVal').textContent = state.ki;
+  document.getElementById('kdVal').textContent = state.kd;
+  document.getElementById('distAVal').textContent = state.distA + '%';
+  document.getElementById('distBVal').textContent = state.distB + '%';
+}
+
+function bindSlider(id, key, parser = parseFloat) {
+  const slider = document.getElementById(id);
+  slider.value = state[key];
+  slider.addEventListener('input', () => {
+    state[key] = parser(slider.value);
+    updateLabels();
+  });
+}
+
+bindSlider('setpoint', 'setpoint', parseFloat);
+bindSlider('kp', 'kp', parseFloat);
+bindSlider('ki', 'ki', parseFloat);
+bindSlider('kd', 'kd', parseFloat);
+bindSlider('distA', 'distA', parseFloat);
+bindSlider('distB', 'distB', parseFloat);
+
+document.getElementById('stepBtn').addEventListener('click', fireStepResponse);
+document.getElementById('clearGhostsBtn').addEventListener('click', () => {
+  state.ghostsA = [];
+  state.ghostsB = [];
+  state.ghostsPath = [];
+  if (state.lastSim) renderAll(state.lastSim);
+});
+document.getElementById('resetAllBtn').addEventListener('click', () => {
+  state.kp = 0; state.ki = 0; state.kd = 0;
+  state.distA = 0; state.distB = 0;
+  state.setpoint = 0.10;
+  state.ghostsA = []; state.ghostsB = []; state.ghostsPath = [];
+  state.missionsPassed = {};
+  state.lastSim = null;
+  document.getElementById('setpoint').value = state.setpoint;
+  document.getElementById('kp').value = 0;
+  document.getElementById('ki').value = 0;
+  document.getElementById('kd').value = 0;
+  document.getElementById('distA').value = 0;
+  document.getElementById('distB').value = 0;
+  updateLabels();
+  renderMissions(state.missionsPassed);
+  // Clear canvases
+  for (const id of ['canvasA', 'canvasB', 'canvasPath']) {
+    const c = document.getElementById(id);
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+  }
+  // Reset diagnostics
+  document.getElementById('diagsA').innerHTML = '';
+  document.getElementById('diagsB').innerHTML = '';
+  document.getElementById('pathDiags').innerHTML = '';
+  document.getElementById('advice').innerHTML = '<div class="title">Hint</div><div>Fire a step response to see how your gains behave.</div>';
+});
+
+// Presets
+document.querySelectorAll('button[data-preset]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = btn.dataset.preset;
+    if (p === 'zero') { state.kp = 0; state.ki = 0; state.kd = 0; }
+    else if (p === 'ponly') { state.kp = 4000; state.ki = 0; state.kd = 0; }
+    else if (p === 'pi') { state.kp = 3000; state.ki = 12000; state.kd = 0; }
+    document.getElementById('kp').value = state.kp;
+    document.getElementById('ki').value = state.ki;
+    document.getElementById('kd').value = state.kd;
+    updateLabels();
+  });
+});
+
+function fireStepResponse() {
+  const params = readParams();
+  // Push current curves to ghosts (if any from last sim)
+  if (state.lastSim) {
+    state.ghostsA.push(state.lastSim.A.speed);
+    state.ghostsB.push(state.lastSim.B.speed);
+    state.ghostsPath.push({ x: state.lastSim.path.x, y: state.lastSim.path.y });
+    if (state.ghostsA.length > MAX_GHOSTS) state.ghostsA.shift();
+    if (state.ghostsB.length > MAX_GHOSTS) state.ghostsB.shift();
+    if (state.ghostsPath.length > MAX_GHOSTS) state.ghostsPath.shift();
+  }
+
+  const sim = simulate(params);
+  state.lastSim = sim;
+  renderAll(sim);
+}
+
+function renderAll(sim) {
+  const params = readParams();
+  drawWheelGraph('canvasA', sim.A.speed, state.ghostsA, params.setpoint, '#dc2626');
+  drawWheelGraph('canvasB', sim.B.speed, state.ghostsB, params.setpoint, '#2563eb');
+  drawPath('canvasPath', sim.path, state.ghostsPath);
+
+  const diagA = computeWheelDiagnostics(sim.A.speed, params.setpoint);
+  const diagB = computeWheelDiagnostics(sim.B.speed, params.setpoint);
+  const pathDiag = computePathDiagnostics(sim.path.x, sim.path.y, sim.path.theta);
+
+  renderDiagnostics('diagsA', diagA, params.setpoint);
+  renderDiagnostics('diagsB', diagB, params.setpoint);
+  renderPathDiagnostics(pathDiag);
+
+  // Missions
+  for (const m of MISSIONS) {
+    if (m.check(diagA, diagB, pathDiag, params)) state.missionsPassed[m.id] = true;
+  }
+  renderMissions(state.missionsPassed);
+
+  // Advice
+  const advice = generateAdvice(diagA, diagB, pathDiag, params);
+  renderAdvice(advice);
+}
+
+// Resize handling
+window.addEventListener('resize', () => {
+  if (state.lastSim) renderAll(state.lastSim);
+});
+
+// Initial render
+updateLabels();
+renderMissions(state.missionsPassed);
+
+</script>
+</body>
+</html>
