@@ -192,6 +192,22 @@
     cursor: pointer;
     border: none;
   }
+  input[type=range]:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+  input[type=range]:disabled::-webkit-slider-thumb {
+    background: #6b7280;
+    cursor: not-allowed;
+  }
+  input[type=range]:disabled::-moz-range-thumb {
+    background: #6b7280;
+    cursor: not-allowed;
+  }
+  .control.disabled .control-label,
+  .control.disabled .control-label .value {
+    opacity: 0.4;
+  }
   button.action {
     width: 100%;
     padding: 10px;
@@ -278,7 +294,7 @@
   }
   .preset-row {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 6px;
   }
   .preset-row button {
@@ -366,9 +382,10 @@
     <div>
       <h2>Presets</h2>
       <div class="preset-row">
-        <button data-preset="zero">Zero</button>
+        <button data-preset="openloop">Open loop</button>
         <button data-preset="ponly">P only</button>
         <button data-preset="pi">P + I</button>
+        <button data-preset="pid">P + I + D</button>
       </div>
       <div style="margin-top:8px;">
         <button class="action" id="stepBtn">⚡ Fire Step Response</button>
@@ -457,13 +474,22 @@ function pwmToSteadySpeed(pwm, wheel) {
 //  Returns time-series for both wheels and the robot path.
 // ============================================================
 function simulate(params) {
-  const { setpoint, kp, ki, kd, distA, distB } = params;
+  const { setpoint, kp, ki, kd, distA, distB, openLoop } = params;
 
   // Per-wheel state (second-order: speed and its rate of change)
   const state = {
     A: { speed: 0, accel: 0, integral: 0, lastError: 0, pwm: 0 },
     B: { speed: 0, accel: 0, integral: 0, lastError: 0, pwm: 0 }
   };
+
+  // In open-loop mode the PWM is fixed for the whole run, mimicking
+  // what the Workshop 2.4 bridge node would send for this setpoint.
+  let openLoopPwm = 0;
+  if (openLoop) {
+    openLoopPwm = (setpoint / OPEN_LOOP_VMAX) * 255;
+    if (openLoopPwm > PWM_MAX) openLoopPwm = PWM_MAX;
+    if (openLoopPwm < PWM_MIN) openLoopPwm = PWM_MIN;
+  }
 
   // Path state (kinematic integration)
   const path = { x: 0, y: 0, theta: 0 };
@@ -482,20 +508,26 @@ function simulate(params) {
   for (let i = 0; i < N; i++) {
     const t = i * SIM_DT;
 
-    // ---- PID update at 100Hz ----
+    // ---- Controller update at 100Hz ----
     if (t - lastPidT >= PID_PERIOD || i === 0) {
       lastPidT = t;
       for (const w of ['A', 'B']) {
         const s = state[w];
-        const error = setpoint - s.speed;
-        const saturated = (s.pwm >= PWM_MAX && error > 0) || (s.pwm <= PWM_MIN && error < 0);
-        if (!saturated) s.integral += error * PID_PERIOD;
-        const derivative = (error - s.lastError) / PID_PERIOD;
-        s.lastError = error;
-        let pwm = kp * error + ki * s.integral + kd * derivative;
-        if (pwm > PWM_MAX) pwm = PWM_MAX;
-        if (pwm < PWM_MIN) pwm = PWM_MIN;
-        s.pwm = pwm;
+        if (openLoop) {
+          // Open loop: ignore feedback entirely, drive the fixed PWM
+          s.pwm = openLoopPwm;
+        } else {
+          // Closed loop: standard discrete PID with anti-windup
+          const error = setpoint - s.speed;
+          const saturated = (s.pwm >= PWM_MAX && error > 0) || (s.pwm <= PWM_MIN && error < 0);
+          if (!saturated) s.integral += error * PID_PERIOD;
+          const derivative = (error - s.lastError) / PID_PERIOD;
+          s.lastError = error;
+          let pwm = kp * error + ki * s.integral + kd * derivative;
+          if (pwm > PWM_MAX) pwm = PWM_MAX;
+          if (pwm < PWM_MIN) pwm = PWM_MIN;
+          s.pwm = pwm;
+        }
       }
     }
 
@@ -766,27 +798,65 @@ function drawPath(canvasId, currentPath, ghostPaths) {
   ctx.stroke();
 
   // Robot starting marker (small filled circle at origin)
-  ctx.fillStyle = '#1f2937';
+  ctx.fillStyle = '#9ca3af';
   ctx.beginPath();
-  ctx.arc(xPx(0), yPx(0), 4, 0, Math.PI * 2);
+  ctx.arc(xPx(0), yPx(0), 3, 0, Math.PI * 2);
   ctx.fill();
 
-  // Final pose marker
+  // Final pose marker — small top-down WonderBot
   const lastIdx = currentPath.x.length - 1;
   const finalX = xPx(currentPath.x[lastIdx]);
   const finalY = yPx(currentPath.y[lastIdx]);
   const finalTheta = currentPath.theta[lastIdx];
-  ctx.fillStyle = '#dc2626';
+  drawWonderbotTopDown(ctx, finalX, finalY, finalTheta);
+}
+
+// Top-down WonderBot icon. Pose: (x, y) in canvas coords, theta in world frame.
+// Body sits flat, two wheels on the long sides, a small "eye" at the front.
+function drawWonderbotTopDown(ctx, x, y, theta) {
+  ctx.save();
+  ctx.translate(x, y);
+  // Canvas y is flipped relative to the maths coords used in the path, so negate theta
+  ctx.rotate(-theta);
+
+  const bw = 22;  // body length (forward dimension)
+  const bh = 14;  // body width
+  const wheelW = 8, wheelH = 3;
+
+  // Wheels (drawn first so they sit under the body edges)
+  ctx.fillStyle = '#1f2937';
+  ctx.fillRect(-wheelW / 2, -bh / 2 - wheelH, wheelW, wheelH);
+  ctx.fillRect(-wheelW / 2,  bh / 2,           wheelW, wheelH);
+
+  // Body
+  ctx.fillStyle = '#f97316';
+  ctx.strokeStyle = '#1f2937';
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.arc(finalX, finalY, 5, 0, Math.PI * 2);
+  const r = 3;
+  ctx.moveTo(-bw / 2 + r, -bh / 2);
+  ctx.lineTo( bw / 2 - r, -bh / 2);
+  ctx.quadraticCurveTo(bw / 2, -bh / 2,  bw / 2, -bh / 2 + r);
+  ctx.lineTo( bw / 2,  bh / 2 - r);
+  ctx.quadraticCurveTo(bw / 2,  bh / 2,  bw / 2 - r,  bh / 2);
+  ctx.lineTo(-bw / 2 + r,  bh / 2);
+  ctx.quadraticCurveTo(-bw / 2,  bh / 2, -bw / 2,  bh / 2 - r);
+  ctx.lineTo(-bw / 2, -bh / 2 + r);
+  ctx.quadraticCurveTo(-bw / 2, -bh / 2, -bw / 2 + r, -bh / 2);
+  ctx.closePath();
   ctx.fill();
-  // Arrow indicating heading
-  ctx.strokeStyle = '#dc2626';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(finalX, finalY);
-  ctx.lineTo(finalX + Math.cos(finalTheta) * 14, finalY - Math.sin(finalTheta) * 14);
   ctx.stroke();
+
+  // Front indicator (small white circle near the leading edge)
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(bw / 2 - 4, 0, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#1f2937';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 // ============================================================
@@ -836,8 +906,8 @@ const MISSIONS = [
   {
     id: 4,
     title: 'Mission 4 — Drive straight',
-    desc: 'Drive at least 25 cm forward and stay within ±5 cm of the centre line. (No disturbance.)',
-    check: (a, b, p, params) => p.maxLat < 0.05 && p.finalX >= 0.25 && params.distA === 0 && params.distB === 0
+    desc: 'Drive at least 25 cm forward. Lateral drift under 1.5 cm and final heading within 5° of straight. (No disturbance.)',
+    check: (a, b, p, params) => p.maxLat < 0.015 && p.finalHeading < 5 && p.finalX >= 0.25 && params.distA === 0 && params.distB === 0
   },
   {
     id: 5,
@@ -936,12 +1006,18 @@ const state = {
   kd: 0,
   distA: 0,
   distB: 0,
+  openLoop: false,
   ghostsA: [],
   ghostsB: [],
   ghostsPath: [],
   missionsPassed: {},
   lastSim: null
 };
+
+// In open-loop mode the bridge node sends a fixed PWM computed from the
+// commanded speed and the v_max placeholder. v_max = 0.19 m/s matches what
+// Workshop 2.4b measured on the real WonderBot. PWM = (setpoint / v_max) * 255.
+const OPEN_LOOP_VMAX = 0.19;
 
 const MAX_GHOSTS = 4;
 
@@ -952,7 +1028,8 @@ function readParams() {
     ki: state.ki,
     kd: state.kd,
     distA: state.distA,
-    distB: state.distB
+    distB: state.distB,
+    openLoop: state.openLoop
   };
 }
 
@@ -992,6 +1069,7 @@ document.getElementById('resetAllBtn').addEventListener('click', () => {
   state.kp = 0; state.ki = 0; state.kd = 0;
   state.distA = 0; state.distB = 0;
   state.setpoint = 0.10;
+  state.openLoop = false;
   state.ghostsA = []; state.ghostsB = []; state.ghostsPath = [];
   state.missionsPassed = {};
   state.lastSim = null;
@@ -1001,6 +1079,7 @@ document.getElementById('resetAllBtn').addEventListener('click', () => {
   document.getElementById('kd').value = 0;
   document.getElementById('distA').value = 0;
   document.getElementById('distB').value = 0;
+  setGainSlidersEnabled(true);
   updateLabels();
   renderMissions(state.missionsPassed);
   // Clear canvases
@@ -1016,16 +1095,37 @@ document.getElementById('resetAllBtn').addEventListener('click', () => {
   document.getElementById('advice').innerHTML = '<div class="title">Hint</div><div>Fire a step response to see how your gains behave.</div>';
 });
 
+// Helper to enable/disable PID gain sliders when toggling open-loop mode
+function setGainSlidersEnabled(enabled) {
+  for (const id of ['kp', 'ki', 'kd']) {
+    const slider = document.getElementById(id);
+    slider.disabled = !enabled;
+    const wrapper = slider.closest('.control');
+    if (wrapper) wrapper.classList.toggle('disabled', !enabled);
+  }
+}
+
 // Presets
 document.querySelectorAll('button[data-preset]').forEach(btn => {
   btn.addEventListener('click', () => {
     const p = btn.dataset.preset;
-    if (p === 'zero') { state.kp = 0; state.ki = 0; state.kd = 0; }
-    else if (p === 'ponly') { state.kp = 4000; state.ki = 0; state.kd = 0; }
-    else if (p === 'pi') { state.kp = 3000; state.ki = 12000; state.kd = 0; }
+    if (p === 'openloop') {
+      state.openLoop = true;
+      state.kp = 0; state.ki = 0; state.kd = 0;
+    } else if (p === 'ponly') {
+      state.openLoop = false;
+      state.kp = 4000; state.ki = 0; state.kd = 0;
+    } else if (p === 'pi') {
+      state.openLoop = false;
+      state.kp = 3000; state.ki = 12000; state.kd = 0;
+    } else if (p === 'pid') {
+      state.openLoop = false;
+      state.kp = 3000; state.ki = 12000; state.kd = 40;
+    }
     document.getElementById('kp').value = state.kp;
     document.getElementById('ki').value = state.ki;
     document.getElementById('kd').value = state.kd;
+    setGainSlidersEnabled(!state.openLoop);
     updateLabels();
   });
 });
